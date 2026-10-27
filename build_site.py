@@ -14,7 +14,7 @@ from matplotlib import colormaps
 
 import charts
 from app_core import load_artifacts, predict
-from signals import ALL_KINDS, generate
+from signals import ALL_KINDS, TRAIN_CLASSES, UNSEEN_CLASSES, generate
 
 JSRS = [-10, -5, 0, 5, 10, 15, 20]
 SEEDS_PER_CELL = 6
@@ -30,6 +30,7 @@ def q8(spec):
 
 def main():
     W, MAHA, M, A = load_artifacts()
+    H = charts.headline(M, A)
     bank = {}
     for ki, kind in enumerate(ALL_KINDS):
         for jsr in JSRS:
@@ -42,6 +43,8 @@ def main():
                              "p": [round(float(x), 4) for x in p_plain],
                              "c": [round(float(x), 4) for x in p_cal],
                              "f": bool(flagged), "snr": round(meta["snr_db"], 1)})
+                if kind in UNSEEN_CLASSES:
+                    cell[-1]["co"] = charts.callout_html(H, TRAIN_CLASSES[int(np.argmax(p_cal))], flagged, float(p_cal.max()))
             bank[f"{kind}|{jsr}"] = cell
 
     specs = {
@@ -56,7 +59,8 @@ def main():
 
     lut = (colormaps["magma"](np.linspace(0, 1, 256))[:, :3] * 255).astype(np.uint8)
     data = {"bank": bank, "jsrs": JSRS, "kinds": ALL_KINDS, "metrics": M, "specs": specs,
-            "notes": charts.NOTES, "scoreName": charts.SCORE_NAMES[M["ood_score"]],
+            "notes": charts.NOTES, "intro": charts.intro_html(H), "next": charts.NEXT_STEPS,
+            "repo": charts.REPO_URL, "scoreName": charts.SCORE_NAMES[M["ood_score"]],
             "lut": base64.b64encode(lut.tobytes()).decode()}
 
     os.makedirs(OUT, exist_ok=True)

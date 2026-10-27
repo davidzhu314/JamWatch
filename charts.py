@@ -123,3 +123,55 @@ NOTES = {
     "jsr": "Counterintuitive: <b>strong</b> pulsed jammers are flagged <b>less</b> often. Their sharp on/off "
            "edges look like a sweep's wrap-around, so the model locks onto 'sweep' with high confidence.",
 }
+
+
+REPO_URL = "https://github.com/davidzhu314/JamWatch"
+
+
+def strong_flag_rate(M, A, min_jsr=10.0):
+    """Share of pulsed samples with JSR >= min_jsr that the OOD flag catches."""
+    s, thr = A[f"score_{M['ood_score']}_pulsed"], M["ood"][M["ood_score"]]["threshold"]
+    strong = A["pulsed_jsr"] >= min_jsr
+    return float(np.mean(s[strong] < thr))
+
+
+def headline(M, A):
+    """Numbers used in the intro, callout and next steps."""
+    o = M["ood"][M["ood_score"]]
+    return {"acc": f'{M["test_accuracy"]*100:.1f}%', "conf90": f'{M["pulsed_frac_conf_over_90_plain"]*100:.0f}%',
+            "flag": f'{o["pulsed_flag_rate"]*100:.0f}%', "strong": f'{strong_flag_rate(M, A)*100:.0f}%',
+            "false": f'{o["id_test_flag_rate"]*100:.0f}%'}
+
+
+def intro_html(h):
+    return (f"<b>Calibration isn't enough.</b> This small CNN classifies RF jamming from a spectrogram. It is "
+            f"<b>{h['acc']}</b> accurate on the jammers it trained on (clean, tone, wideband, sweep), but confidently "
+            f"wrong on an unseen <b>pulsed</b> jammer: {h['conf90']} of pulsed samples get over 90% confidence. "
+            f"Temperature scaling doesn't change that, and simple OOD scores flag only <b>{h['flag']}</b> of those "
+            f"cases ({h['strong']} when the pulsed jammer is strong).")
+
+
+def callout_html(h, pred, flagged, conf):
+    """Explains a prediction on the unseen pulsed jammer, so a missing badge reads as the finding."""
+    why = {
+        "sweep": "Each time the pulse switches on or off, it splashes a brief burst of energy across every frequency "
+                 "(the faint vertical lines). Those edges look like a sweep wrapping around, so the model answers "
+                 "'sweep', often at ~100%.",
+        "clean": "A weak pulse is buried in the noise, so the spectrogram looks like a clean signal.",
+        "wideband": "The gated on/off bursts smear energy across a band, which the model reads as band-limited noise.",
+        "tone": "The pulse sits at one frequency like a tone, but its gaps rarely fool the model this way.",
+    }[pred]
+    tail = (f"This time the flag fired, which happens for only {h['flag']} of pulsed samples." if flagged else
+            f"The flag catches only {h['flag']} of pulsed jammers ({h['strong']} of strong ones), so a missing "
+            f"⚠️ badge here is the finding, not a bug.")
+    head = "Why so sure?" if conf >= 0.9 else f"Why '{pred}'?"
+    return (f"<b>{head}</b> There's no 'pulsed' label, so the model has to pick a class it knows. "
+            f"{why} {tail}")
+
+
+NEXT_STEPS = [
+    "Hold out a second unseen jammer (for example, frequency-hopping). Tune the OOD detector on one held-out "
+    "jammer, then report on the other, so the reported number is never one the detector was tuned for.",
+    "With that tuning set in place, try stronger OOD methods fairly: outlier exposure during training, "
+    "multi-layer Mahalanobis, and small ensembles.",
+]

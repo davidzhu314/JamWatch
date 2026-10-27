@@ -1,6 +1,10 @@
 # Jam Watch
 
-A small CNN that spots and classifies RF jamming from a spectrogram, and tells you when it's unsure. It is trained on four classes (`clean`, `tone`, `wideband`, `sweep`) of synthetic QPSK at 1 MHz complex baseband. A fifth jammer, `pulsed` (a tone gated on and off), is held out completely: it is never used for training, validation, temperature fitting or threshold tuning. The demo compares a plain classifier with a temperature-calibrated one plus an out-of-distribution (OOD) "unfamiliar interference" flag. The intended point is that the plain model is confidently wrong on a jammer it has never seen, and the flag should admit it is unsure. **Result: the first half holds strongly. The second half only partly holds (see below).**
+**Calibration isn't enough.** The model is 97.8% accurate on known jammers but confidently wrong on an unseen pulsed jammer, and simple OOD scores flag only 31% of those cases (19% for strong pulsed).
+
+**Live demo:** https://jamwatch.vercel.app · **Code:** https://github.com/davidzhu314/JamWatch
+
+Jam Watch is a small CNN that classifies RF jamming from a spectrogram. It is trained on four classes (`clean`, `tone`, `wideband`, `sweep`) of synthetic QPSK at 1 MHz complex baseband. A fifth jammer, `pulsed` (a tone switched on and off), is held out completely: it is never used for training, validation, temperature fitting or threshold tuning. On pulsed samples, 67.5% get over 90% confidence. Temperature scaling (T = 1.03) changes almost nothing, because the model is already well calibrated on the classes it knows. An out-of-distribution (OOD) "unfamiliar interference" flag, set so 95% of familiar samples pass, catches 31% of pulsed samples overall and only 19% of strong ones (JSR ≥ 10 dB). Strong pulses fool it most: their sharp on/off edges look like a sweep wrapping around, so the model answers "sweep" at near-100% confidence.
 
 ## Run it
 
@@ -65,24 +69,31 @@ What the model calls pulsed: sweep 62%, wideband 24%, clean 14%, tone 1%.
 
 Pulsed flag rate by JSR (dB): −10…−5: 39%, −5…0: 41%, 0…5: 39%, 5…10: 27%, 10…15: 19%, 15…20: 19%.
 
-### What this means
+### The finding: calibration isn't enough
 
-- **The model is confidently wrong on the unseen jammer.** Two thirds of pulsed samples get >90% confidence, and ECE jumps from 0.007 to 0.34 once pulsed is included.
-- **Temperature scaling does nothing here.** The model is already well calibrated on the classes it knows (T ≈ 1), and calibration can't fix confidence on a class the model has never seen.
-- **The OOD flag only half-works.** It catches 31% of pulsed at a 5% false-alarm rate (AUROC 0.70). It is weakest exactly where you'd want it most: strong pulsed jammers are flagged only ~19% of the time. Their sharp on/off edges produce broadband vertical clicks, which the model treats as a sweep's wrap-around and labels `sweep` with near-100% confidence.
-- **Pulsed is not called `tone`.** The interesting failure is `sweep`, driven by the gating transients.
-- None of these numbers were tuned on pulsed data.
+- **Confidently wrong on the unseen jammer.** 67.5% of pulsed samples get over 90% confidence, and ECE jumps from 0.007 to 0.34 once pulsed is included.
+- **Temperature scaling doesn't help.** The model is already well calibrated on the classes it knows (T = 1.03). Calibration can't fix confidence on a class the model has never seen.
+- **Simple OOD scores catch only some of it.** The flag catches 31% of pulsed at a 5% false-alarm rate (AUROC 0.70), and only 19% of strong pulsed (JSR ≥ 10 dB), which is where you'd most want it.
+- **Why strong pulses fool it.** Each on/off edge splashes a brief burst of energy across every frequency. The model reads these as a sweep wrapping around and answers `sweep` at near-100% confidence. Pulsed is almost never called `tone` (1%).
+- **No tuning on pulsed.** None of these numbers were tuned on pulsed data. The one change made after seeing pulsed results was adding Mahalanobis as a third OOD score, and it did not help.
+
+In the live demo, a pulsed sample with **no** warning badge is the expected, common case, not a bug. After "Surprise me" → "Reveal", the app shows a short callout explaining why.
+
+## Next steps
+
+- **Hold out a second unseen jammer** (for example, frequency hopping). Tune the OOD detector on one held-out jammer and report results on the other, so the reported number never comes from the jammer the detector was tuned on.
+- With that tuning set in place, fairly try stronger OOD methods: outlier exposure during training, multi-layer Mahalanobis, and small ensembles.
 
 ## Deploy
 
 **Streamlit Community Cloud**
-1. Push this folder to a GitHub repo, including `artifacts/` (~1.3 MB). `.venv/` and `site/` are gitignored.
+1. Fork or clone https://github.com/davidzhu314/JamWatch. It already includes `artifacts/` (~1.2 MB); `.venv/` and `site/` are gitignored.
 2. At share.streamlit.io, click "New app", pick the repo, and set the main file to `app.py`. Under Advanced settings, choose Python 3.10 or newer.
 3. Cloud installs `requirements.txt`, which has no torch, so the build is small and fast.
 
 **Vercel (static version)**
 ```bash
 python build_site.py
-vercel deploy site --prod
+cd site && vercel deploy --prod
 ```
 The static site can't generate new signals. Instead it picks from 210 precomputed samples (5 scenarios × 7 JSR levels × 6 seeds), run through the same model.

@@ -16,7 +16,8 @@ from app_core import load_artifacts, predict  # noqa: E402
 from signals import ALL_KINDS, JSR_RANGE, TRAIN_CLASSES, UNSEEN_CLASSES, generate, spectrogram_axes  # noqa: E402
 
 from charts import (BLUE, BORDER, INK, INK2, MUTED, NOTES, ORANGE, PANEL, SCORE_NAMES, SURFACE,  # noqa: E402
-                    flag_jsr_chart, ood_hist, pred_as_chart, reliability_chart)
+                    NEXT_STEPS, REPO_URL, callout_html, flag_jsr_chart, headline, intro_html, ood_hist,
+                    pred_as_chart, reliability_chart)
 
 st.set_page_config(page_title="Jam Watch", page_icon="📡", layout="wide")
 
@@ -44,6 +45,11 @@ h1, h2, h3 {{ letter-spacing: -0.01em; }}
 .jw-stat {{ background: {PANEL}; border: 1px solid {BORDER}; border-radius: 12px; padding: 14px 16px; }}
 .jw-stat .v {{ font-size: 1.6rem; font-weight: 650; color: {INK}; font-variant-numeric: tabular-nums; }}
 .jw-stat .d {{ color: {MUTED}; font-size: .82rem; }}
+.jw-links {{ margin-top: 8px !important; font-size: .9rem !important; }}
+.jw-links a {{ color: {BLUE}; text-decoration: none; }}
+.jw-callout {{ background: rgba(57,135,229,.08); border: 1px solid rgba(57,135,229,.35); border-left: 3px solid {BLUE};
+  border-radius: 10px; padding: 12px 16px; margin-top: 12px; color: {INK2}; font-size: .9rem; line-height: 1.5; }}
+.jw-callout b {{ color: {INK}; }}
 .jw-note {{ color: {INK2}; font-size: .9rem; margin: -4px 0 18px 0; }}
 div[data-testid="stTabs"] button p {{ font-size: 1rem; }}
 </style>
@@ -138,10 +144,9 @@ def on_surprise():
 
 
 # ---------------------------------------------------------------- header
-st.markdown("""<div class="jw-hero"><h1>📡 Jam Watch</h1>
-<p>A small CNN that classifies RF jamming from a spectrogram, and says when it's looking at something it has
-never seen. Trained on <b>clean</b>, <b>tone</b>, <b>wideband</b> and <b>sweep</b>. The <b>pulsed</b> jammer is held out
-entirely.</p></div>""", unsafe_allow_html=True)
+H = headline(M, A)
+st.markdown(f"""<div class="jw-hero"><h1>📡 Jam Watch</h1><p>{intro_html(H)}</p>
+<p class="jw-links"><a href="{REPO_URL}" target="_blank">Code on GitHub ↗</a></p></div>""", unsafe_allow_html=True)
 st.write("")
 
 tab1, tab2 = st.tabs(["Live detector", "Calibration & results"])
@@ -195,6 +200,9 @@ with tab1:
                 st.rerun()
         else:
             truth_line()
+            if ss.kind in UNSEEN_CLASSES:
+                pred = TRAIN_CLASSES[int(np.argmax(p_cal))]
+                st.markdown(f'<div class="jw-callout">{callout_html(H, pred, flagged, float(p_cal.max()))}</div>', unsafe_allow_html=True)
 
 # ================================================================ TAB 2
 with tab2:
@@ -248,6 +256,8 @@ with tab2:
                  "Pulsed flagged": f'{v["pulsed_flag_rate"]*100:.0f}%',
                  "Seen flagged": f'{v["id_test_flag_rate"]*100:.0f}%'} for k, v in o.items()]
     st.dataframe(pd.DataFrame(ood_rows), hide_index=True, width="stretch")
+    st.subheader("Next steps")
+    st.markdown("".join(f"- {x}\n" for x in NEXT_STEPS))
     st.caption(f"Temperature T = {T:.3f}, fit on seen-jammer validation data. Thresholds use seen-jammer validation "
                "data only. Pulsed data was never used to fit or tune anything. AUROC: 1.0 = perfect separation, "
                "0.5 = coin flip. FPR @ 95% TPR: share of pulsed samples that slip through when 95% of seen samples pass.")

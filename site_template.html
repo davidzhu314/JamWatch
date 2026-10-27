@@ -23,6 +23,13 @@ body { font-family: Inter, system-ui, sans-serif; font-size: 15px; line-height: 
 h1 { font-size: 34px; letter-spacing: -0.02em; margin: 0 0 6px; font-weight: 700; }
 .lede { color: var(--ink2); max-width: 760px; margin: 0; font-size: 16px; }
 .lede b { color: var(--ink); font-weight: 600; }
+.links { margin: 10px 0 0; font-size: 14px; }
+.links a, .footer a { color: var(--blue); text-decoration: none; }
+.callout { background: rgba(57,135,229,.08); border: 1px solid rgba(57,135,229,.35); border-left: 3px solid var(--blue);
+  border-radius: 10px; padding: 12px 16px; margin-top: 12px; color: var(--ink2); font-size: 14px; }
+.callout b { color: var(--ink); }
+.next { color: var(--ink2); padding-left: 20px; margin: 0; }
+.next li { margin: 6px 0; }
 .tabs { display: flex; gap: 22px; border-bottom: 1px solid var(--border); margin: 28px 0 24px; }
 .tab { background: none; border: 0; color: var(--ink2); font: inherit; font-size: 15px; padding: 10px 0; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; }
 .tab[aria-selected="true"] { color: var(--blue); border-color: var(--blue); }
@@ -91,8 +98,8 @@ tr:last-child td { border-bottom: 0; }
 <body>
 <div class="wrap">
   <h1>📡 Jam Watch</h1>
-  <p class="lede">A small CNN that classifies RF jamming from a spectrogram, and says when it's looking at something it has never seen.
-    Trained on <b>clean</b>, <b>tone</b>, <b>wideband</b> and <b>sweep</b>. The <b>pulsed</b> jammer is held out entirely.</p>
+  <p class="lede" id="intro"></p>
+  <p class="links"><a id="repo" target="_blank" rel="noopener">Code on GitHub ↗</a></p>
 
   <div class="tabs" role="tablist">
     <button class="tab" role="tab" aria-selected="true" data-tab="live">Live detector</button>
@@ -146,10 +153,12 @@ tr:last-child td { border-bottom: 0; }
     <h2>Numbers</h2>
     <div class="table-scroll"><table id="t_cal"></table></div>
     <div class="table-scroll"><table id="t_ood"></table></div>
+    <h2>Next steps</h2>
+    <ul class="next" id="next"></ul>
     <p class="fine" id="fine"></p>
   </section>
 
-  <div class="footer">Synthetic data: QPSK at 1 MHz complex baseband, 4096 samples, 64×64 spectrogram. Pulsed data was never used to fit or tune anything.</div>
+  <div class="footer">Synthetic data: QPSK at 1 MHz complex baseband, 4096 samples, 64×64 spectrogram. Pulsed data was never used to fit or tune anything. <a id="repo2" target="_blank" rel="noopener">Source on GitHub</a></div>
 </div>
 
 <script>
@@ -158,6 +167,10 @@ const M = D.metrics, CLASSES = M.classes, UNSEEN = ["pulsed"];
 const $ = (id) => document.getElementById(id);
 const lut = Uint8Array.from(atob(D.lut), c => c.charCodeAt(0));
 const st = { kind: "tone", jsrIdx: 4, idx: 0, surprise: false, revealed: false };
+
+$("intro").innerHTML = D.intro;
+$("repo").href = $("repo2").href = D.repo;
+$("next").innerHTML = D.next.map(x => `<li>${x}</li>`).join("");
 
 // ---------- tabs
 document.querySelectorAll(".tab").forEach(t => t.onclick = () => {
@@ -238,7 +251,8 @@ function render() {
   } else {
     const tag = UNSEEN.includes(st.kind) ? ` <span class="unseen">(never seen in training)</span>` : "";
     const j = st.kind === "clean" ? "" : ` · JSR ${jsr} dB`;
-    $("truth").innerHTML = `<div class="truth">Ground truth: <b>${st.kind}</b>${tag}${j} · SNR ${Math.round(s.snr)} dB</div>`;
+    $("truth").innerHTML = `<div class="truth">Ground truth: <b>${st.kind}</b>${tag}${j} · SNR ${Math.round(s.snr)} dB</div>`
+      + (s.co ? `<div class="callout">${s.co}</div>` : "");
   }
 }
 
