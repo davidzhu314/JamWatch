@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Jam Watch</title>
+<meta name="description" content="A jamming classifier that tells you when it's unsure.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📡</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/vega@6.4.0"></script>
+<script src="https://cdn.jsdelivr.net/npm/vega-lite@6.4.1"></script>
+<script src="https://cdn.jsdelivr.net/npm/vega-embed@7.3.0"></script>
+<style>
+:root {
+  --bg: #0f1115; --panel: #171a21; --border: #262a33; --ink: #f0efec; --ink2: #c3c2b7; --muted: #8b8a84;
+  --blue: #3987e5; --orange: #d95926; --warn: #e5a50a; --good: #2fb47c;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--ink); }
+body { font-family: Inter, system-ui, sans-serif; font-size: 15px; line-height: 1.5; -webkit-font-smoothing: antialiased; }
+.wrap { max-width: 1180px; margin: 0 auto; padding: 40px 24px 80px; }
+h1 { font-size: 34px; letter-spacing: -0.02em; margin: 0 0 6px; font-weight: 700; }
+.lede { color: var(--ink2); max-width: 760px; margin: 0; font-size: 16px; }
+.lede b { color: var(--ink); font-weight: 600; }
+.tabs { display: flex; gap: 22px; border-bottom: 1px solid var(--border); margin: 28px 0 24px; }
+.tab { background: none; border: 0; color: var(--ink2); font: inherit; font-size: 15px; padding: 10px 0; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.tab[aria-selected="true"] { color: var(--blue); border-color: var(--blue); }
+.hidden { display: none !important; }
+.controls { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; }
+.label { font-size: 13px; color: var(--ink2); margin-bottom: 6px; }
+.seg { display: inline-flex; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; flex-wrap: wrap; }
+.seg button { background: transparent; color: var(--ink); border: 0; border-right: 1px solid var(--border); padding: 9px 16px; font: inherit; cursor: pointer; }
+.seg button:last-child { border-right: 0; }
+.seg button[aria-pressed="true"] { background: rgba(57,135,229,.14); color: var(--blue); }
+.seg button:hover { background: rgba(255,255,255,.04); }
+.btn { background: var(--panel); color: var(--ink); border: 1px solid var(--border); border-radius: 10px; padding: 9px 18px; font: inherit; cursor: pointer; white-space: nowrap; }
+.btn:hover { border-color: #3a3f4a; }
+.btn.wide { width: 100%; padding: 11px; }
+.spacer { flex: 1; }
+.slider { margin-top: 18px; }
+.slider-head { display: flex; justify-content: space-between; font-size: 13px; color: var(--ink2); }
+.slider-head span:last-child { color: var(--blue); font-family: "JetBrains Mono", monospace; }
+input[type=range] { width: 100%; accent-color: var(--blue); margin: 8px 0 0; }
+.ticks { display: flex; justify-content: space-between; color: var(--muted); font-size: 11px; font-family: "JetBrains Mono", monospace; }
+.live { display: grid; grid-template-columns: 1.35fr 1fr; gap: 32px; margin-top: 24px; }
+.plot canvas { width: 100%; height: auto; display: block; }
+.caption { color: var(--muted); font-size: 13px; margin-top: 8px; }
+.cards { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.card { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 18px 20px; }
+.card .k { color: var(--muted); font-size: 11.5px; text-transform: uppercase; letter-spacing: .08em; }
+.card .pred { font-size: 26px; font-weight: 650; margin: 2px 0 0; }
+.card .conf { color: var(--ink2); font-size: 14px; margin-bottom: 10px; }
+.row { margin: 7px 0; font-size: 13px; color: var(--ink2); }
+.row .top { display: flex; justify-content: space-between; margin-bottom: 3px; }
+.row .num { color: var(--ink); font-variant-numeric: tabular-nums; }
+.bar { background: var(--border); border-radius: 4px; height: 6px; overflow: hidden; }
+.bar > div { height: 100%; border-radius: 4px; transition: width .25s ease; }
+.badge { border-radius: 12px; padding: 14px 18px; margin-top: 14px; display: flex; gap: 12px; align-items: center; font-weight: 600; font-size: 16px; }
+.badge small { display: block; font-weight: 400; font-size: 13px; opacity: .85; margin-top: 2px; }
+.badge.warn { background: rgba(229,165,10,.12); border: 1px solid rgba(229,165,10,.55); color: #f5c451; }
+.badge.ok { background: rgba(47,180,124,.10); border: 1px solid rgba(47,180,124,.45); color: #6fd3a5; }
+.truth { color: var(--ink2); font-size: 14px; margin-top: 12px; }
+.truth b { color: var(--ink); }
+.truth .unseen { color: #f5c451; }
+.stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+.stat { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; }
+.stat .v { font-size: 26px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.stat .d { color: var(--muted); font-size: 13px; }
+h2 { font-size: 24px; letter-spacing: -0.01em; margin: 36px 0 12px; font-weight: 650; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; }
+.chart { width: 100%; min-height: 260px; }
+.note { color: var(--ink2); font-size: 14px; margin: 8px 0 0; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; margin-top: 12px; background: var(--panel); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+th, td { text-align: left; padding: 9px 14px; border-bottom: 1px solid var(--border); }
+th { color: var(--muted); font-weight: 500; font-size: 13px; }
+td { font-variant-numeric: tabular-nums; }
+tr:last-child td { border-bottom: 0; }
+.fine { color: var(--muted); font-size: 12.5px; margin-top: 10px; }
+.footer { color: var(--muted); font-size: 12.5px; margin-top: 48px; border-top: 1px solid var(--border); padding-top: 16px; }
+.vega-embed summary { display: none; }
+@media (max-width: 860px) {
+  .wrap { padding: 28px 16px 60px; }
+  .live, .grid2 { grid-template-columns: 1fr; }
+  .stats { grid-template-columns: 1fr 1fr; }
+  .spacer { display: none; }
+  .table-scroll { overflow-x: auto; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>📡 Jam Watch</h1>
+  <p class="lede">A small CNN that classifies RF jamming from a spectrogram, and says when it's looking at something it has never seen.
+    Trained on <b>clean</b>, <b>tone</b>, <b>wideband</b> and <b>sweep</b>. The <b>pulsed</b> jammer is held out entirely.</p>
+
+  <div class="tabs" role="tablist">
+    <button class="tab" role="tab" aria-selected="true" data-tab="live">Live detector</button>
+    <button class="tab" role="tab" aria-selected="false" data-tab="results">Calibration &amp; results</button>
+  </div>
+
+  <section id="live">
+    <div class="controls">
+      <div>
+        <div class="label">Scenario</div>
+        <div class="seg" id="seg"></div>
+      </div>
+      <div class="spacer"></div>
+      <button class="btn" id="surprise" title="Picks a jammer type the model never trained on">🎲 Surprise me</button>
+      <button class="btn" id="regen">↻ Regenerate</button>
+    </div>
+    <div class="slider">
+      <div class="slider-head"><span>Jammer-to-signal ratio (dB)</span><span id="jsrv"></span></div>
+      <input type="range" id="jsr" min="0" max="6" step="1" value="4" aria-label="Jammer-to-signal ratio">
+      <div class="ticks" id="ticks"></div>
+    </div>
+    <div class="live">
+      <div class="plot">
+        <canvas id="spec" width="1280" height="780"></canvas>
+        <div class="caption">QPSK signal in the middle band. A jammer, if present, shows as extra energy: a line (tone), a block (wideband), a diagonal (sweep), or dashes (pulsed). Static version: samples are precomputed with the same model.</div>
+      </div>
+      <div>
+        <div class="cards">
+          <div class="card" id="plain"></div>
+          <div class="card" id="cal"></div>
+        </div>
+        <div id="badge"></div>
+        <div id="truth"></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="results" class="hidden">
+    <div class="stats" id="stats"></div>
+    <h2>Is confidence honest?</h2>
+    <div class="grid2">
+      <div><div class="chart" id="c_rel_id"></div><p class="note" data-note="rel_id"></p></div>
+      <div><div class="chart" id="c_rel_mixed"></div><p class="note" data-note="rel_mixed"></p></div>
+    </div>
+    <h2>Confidence vs. the unfamiliar flag</h2>
+    <div class="chart" id="c_ood"></div><p class="note" id="oodnote"></p>
+    <div class="grid2">
+      <div><h2>Flag rate on pulsed, by jammer strength</h2><div class="chart" id="c_jsr"></div><p class="note" data-note="jsr"></p></div>
+      <div><h2>What the model calls the pulsed jammer</h2><div class="chart" id="c_pred"></div><p class="note" id="prednote"></p></div>
+    </div>
+    <h2>Numbers</h2>
+    <div class="table-scroll"><table id="t_cal"></table></div>
+    <div class="table-scroll"><table id="t_ood"></table></div>
+    <p class="fine" id="fine"></p>
+  </section>
+
+  <div class="footer">Synthetic data: QPSK at 1 MHz complex baseband, 4096 samples, 64×64 spectrogram. Pulsed data was never used to fit or tune anything.</div>
+</div>
+
+<script>
+const D = /*__DATA__*/null;
+const M = D.metrics, CLASSES = M.classes, UNSEEN = ["pulsed"];
+const $ = (id) => document.getElementById(id);
+const lut = Uint8Array.from(atob(D.lut), c => c.charCodeAt(0));
+const st = { kind: "tone", jsrIdx: 4, idx: 0, surprise: false, revealed: false };
+
+// ---------- tabs
+document.querySelectorAll(".tab").forEach(t => t.onclick = () => {
+  document.querySelectorAll(".tab").forEach(x => x.setAttribute("aria-selected", x === t));
+  $("live").classList.toggle("hidden", t.dataset.tab !== "live");
+  $("results").classList.toggle("hidden", t.dataset.tab !== "results");
+  if (t.dataset.tab === "results") drawCharts();
+});
+
+// ---------- controls
+D.kinds.forEach(k => {
+  const b = document.createElement("button");
+  b.textContent = UNSEEN.includes(k) ? `${k} (unseen)` : k;
+  b.dataset.kind = k;
+  b.onclick = () => { st.kind = k; st.surprise = false; newSample(); };
+  $("seg").appendChild(b);
+});
+$("ticks").innerHTML = D.jsrs.map(j => `<span>${j}</span>`).join("");
+$("jsr").oninput = (e) => { st.jsrIdx = +e.target.value; newSample(); };
+$("regen").onclick = () => newSample();
+$("surprise").onclick = () => {
+  st.kind = UNSEEN[Math.floor(Math.random() * UNSEEN.length)];
+  st.jsrIdx = Math.floor(Math.random() * D.jsrs.length);
+  $("jsr").value = st.jsrIdx; st.surprise = true; newSample();
+};
+function newSample() {
+  const n = D.bank[`${st.kind}|${D.jsrs[st.jsrIdx]}`].length;
+  let i = Math.floor(Math.random() * n);
+  if (n > 1 && i === st.idx) i = (i + 1) % n;
+  st.idx = i; st.revealed = false; render();
+}
+
+// ---------- spectrogram
+function drawSpec(b64) {
+  const px = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+  const img = new ImageData(64, 64);
+  for (let f = 0; f < 64; f++) for (let t = 0; t < 64; t++) {
+    const v = px[f * 64 + t], o = ((63 - f) * 64 + t) * 4;   // row 0 = lowest freq -> bottom
+    img.data[o] = lut[v * 3]; img.data[o + 1] = lut[v * 3 + 1]; img.data[o + 2] = lut[v * 3 + 2]; img.data[o + 3] = 255;
+  }
+  const off = document.createElement("canvas"); off.width = off.height = 64;
+  off.getContext("2d").putImageData(img, 0, 0);
+  const c = $("spec"), g = c.getContext("2d"), W = c.width, H = c.height;
+  const L = 150, R = 40, T = 20, B = 110, pw = W - L - R, ph = H - T - B;
+  g.fillStyle = "#0f1115"; g.fillRect(0, 0, W, H);
+  g.imageSmoothingEnabled = false; g.drawImage(off, L, T, pw, ph);
+  g.fillStyle = "#8b8a84"; g.font = "24px JetBrains Mono, monospace"; g.textAlign = "right"; g.textBaseline = "middle";
+  [-400, -200, 0, 200, 400].forEach(k => g.fillText(k, L - 14, T + ph * (1 - (k + 500) / 1000)));
+  g.textAlign = "center"; g.textBaseline = "top";
+  [0, 1, 2, 3, 4].forEach(ms => g.fillText(ms.toFixed(1), L + pw * ms / 4.096, T + ph + 14));
+  g.fillStyle = "#c3c2b7"; g.font = "26px Inter, sans-serif";
+  g.fillText("Time (ms)", L + pw / 2, T + ph + 58);
+  g.save(); g.translate(36, T + ph / 2); g.rotate(-Math.PI / 2); g.fillText("Frequency offset (kHz)", 0, 0); g.restore();
+}
+
+// ---------- cards
+function card(title, p, color) {
+  const i = p.indexOf(Math.max(...p));
+  const rows = CLASSES.map((c, j) => `<div class="row"><div class="top"><span>${c}</span><span class="num">${Math.round(p[j] * 100)}%</span></div>
+    <div class="bar"><div style="width:${Math.max(p[j] * 100, 1.5)}%;background:${j === i ? color : "#8b8a84"}"></div></div></div>`).join("");
+  return `<div class="k">${title}</div><div class="pred">${CLASSES[i]}</div><div class="conf">${(p[i] * 100).toFixed(1)}% confident</div>${rows}`;
+}
+
+function render() {
+  document.querySelectorAll("#seg button").forEach(b => b.setAttribute("aria-pressed", !st.surprise && b.dataset.kind === st.kind));
+  const jsr = D.jsrs[st.jsrIdx];
+  $("jsrv").textContent = `${jsr} dB`;
+  const s = D.bank[`${st.kind}|${jsr}`][st.idx];
+  drawSpec(s.s);
+  $("plain").innerHTML = card("Plain model", s.p, "var(--orange)");
+  $("cal").innerHTML = card(`Calibrated · T=${M.temperature.toFixed(2)}`, s.c, "var(--blue)");
+  $("badge").innerHTML = s.f
+    ? `<div class="badge warn">⚠️<div>Unfamiliar interference<small>${D.scoreName} score is outside what the model saw in training. Don't trust the label above.</small></div></div>`
+    : `<div class="badge ok">✓<div>Looks familiar<small>${D.scoreName} score is within the training range.</small></div></div>`;
+  if (st.surprise && !st.revealed) {
+    $("truth").innerHTML = `<div style="margin-top:12px"><button class="btn wide" id="reveal">Reveal what it really was</button></div>`;
+    $("reveal").onclick = () => { st.revealed = true; render(); };
+  } else {
+    const tag = UNSEEN.includes(st.kind) ? ` <span class="unseen">(never seen in training)</span>` : "";
+    const j = st.kind === "clean" ? "" : ` · JSR ${jsr} dB`;
+    $("truth").innerHTML = `<div class="truth">Ground truth: <b>${st.kind}</b>${tag}${j} · SNR ${Math.round(s.snr)} dB</div>`;
+  }
+}
+
+// ---------- results
+const pct = (x, d = 0) => `${(x * 100).toFixed(d)}%`;
+const o = M.ood, S = M.ood_score;
+$("stats").innerHTML = [
+  [pct(M.test_accuracy, 1), "accuracy on seen jammers"],
+  [pct(M.pulsed_frac_conf_over_90_plain), "of pulsed samples get >90% confidence (plain)"],
+  [pct(o[S].pulsed_flag_rate), "of pulsed samples flagged unfamiliar"],
+  [pct(o[S].id_test_flag_rate), "of seen samples flagged (false alarms)"],
+].map(([v, d]) => `<div class="stat"><div class="v">${v}</div><div class="d">${d}</div></div>`).join("");
+document.querySelectorAll("[data-note]").forEach(n => n.innerHTML = D.notes[n.dataset.note]);
+$("oodnote").innerHTML = `The flag uses the <b>${D.scoreName}</b> score (it separated pulsed best of the three we tried). ` + D.notes.ood;
+const topPred = Object.entries(M.pulsed_predicted_as).sort((a, b) => b[1] - a[1])[0][0];
+$("prednote").innerHTML = `With no 'pulsed' option, the model forces it into a known class, most often <b>${topPred}</b>.`;
+const R = M.reliability;
+$("t_cal").innerHTML = `<tr><th>Test set</th><th>Model</th><th>Accuracy</th><th>Mean confidence</th><th>ECE</th></tr>` +
+  [["id", "Seen jammers"], ["mixed", "Seen + unseen pulsed"]].flatMap(([k, n]) => ["plain", "calibrated"].map(m => {
+    const r = R[`${k}_${m}`];
+    return `<tr><td>${n}</td><td>${m[0].toUpperCase() + m.slice(1)}</td><td>${pct(r.accuracy, 1)}</td><td>${pct(r.mean_conf, 1)}</td><td>${r.ece.toFixed(3)}</td></tr>`;
+  })).join("");
+const names = { msp: "max-softmax", energy: "energy", mahalanobis: "Mahalanobis distance" };
+$("t_ood").innerHTML = `<tr><th>OOD score</th><th>AUROC (pulsed vs seen)</th><th>FPR @ 95% TPR</th><th>Pulsed flagged</th><th>Seen flagged</th></tr>` +
+  Object.entries(o).map(([k, v]) => `<tr><td>${names[k]}${k === S ? " ✓ used for flag" : ""}</td><td>${v.auroc.toFixed(3)}</td><td>${v.fpr_at_95tpr.toFixed(3)}</td><td>${pct(v.pulsed_flag_rate)}</td><td>${pct(v.id_test_flag_rate)}</td></tr>`).join("");
+$("fine").textContent = `Temperature T = ${M.temperature.toFixed(3)}, fit on seen-jammer validation data. Thresholds use seen-jammer validation data only. AUROC: 1.0 = perfect separation, 0.5 = coin flip. FPR @ 95% TPR: share of pulsed samples that slip through when 95% of seen samples pass.`;
+
+let drawn = false;
+function drawCharts() {
+  if (drawn) return; drawn = true;
+  for (const [k, spec] of Object.entries(D.specs)) vegaEmbed(`#c_${k}`, spec, { actions: false, renderer: "svg" });
+}
+
+render();
+</script>
+</body>
+</html>
